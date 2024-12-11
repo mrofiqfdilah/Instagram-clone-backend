@@ -25,65 +25,55 @@ class AuthController extends Controller
      */
     public function SignUp(Request $request)
     {
-        // Validate the incoming request data
         $validator = Validator::make($request->all(), [
-            'full_name' => 'required|string|max:255', // Full name is required, must be a string and not exceed 255 characters
+            'full_name' => 'required|string|max:100',
             'username' => [
                 'required',
-                'unique:users,username', // Ensure the username is unique
-                'regex:/^[a-zA-Z0-9_.]+$/', // Only alphanumeric characters, dots, and underscores allowed
-                'min:3', // Minimum 3 characters
-                'max:18', // Maximum 18 characters
+                'unique:users,username',
+                'regex:/^[a-zA-Z0-9_.]+$/',
+                'min:3',
+                'max:18',
             ],
             'email' => [
                 'required',
-                'email:rfc,dns', // Validate the email format
-                'unique:users,email', // Ensure the email is unique
-                'max:30', // Maximum 30 characters for email
+                'email:rfc,dns',
+                'unique:users,email',
+                'max:30',
             ],
-            'password' => 'required|string|min:8', // Password is required, must be at least 8 characters and confirmed
-            'roles' => 'in:user,admin', // The role must be either 'user' or 'admin'
-            'image' => 'mimes:jpeg,png,jpg,gif|max:2048'
+            'password' => 'required|string|min:8',
+            'roles' => 'in:user,admin',
+            'image' => 'mimes:jpeg,png,jpg|max:2048'
         ]);
 
-        // If validation fails, return a 422 response with error details
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Invalid field', // General error message
-                'errors' => $validator->errors() // Validation errors
+                'message' => 'Invalid field',
+                'errors' => $validator->errors()
             ], 422);
         }
 
-        // Handle image upload if present
         $imagePath = null;
         if ($request->hasFile('image')) {
-
-            // Sanitize the file name
             $originalName = $request->file('image')->getClientOriginalName();
             $sanitizedFileName = Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) . '-' . time() . '.' . $request->file('image')->getClientOriginalExtension();
-
-            // Store the file securely in the 'public' disk
             $imagePath = $request->file('image')->storeAs('Image_Profile', $sanitizedFileName, 'public');
         }
 
-        // Create a new user in the database
         $create_user = User::create([
             'full_name' => $request->full_name,
             'username' => $request->username,
             'email' => $request->email,
-            'password' => Hash::make($request->password), // Hash the password before saving
-            'roles' => 'user', // Default role is 'user' (can be adjusted as needed)
+            'password' => Hash::make($request->password),
+            'roles' => 'user',
             'status' => 'Public',
-            'image' => $imagePath // Store the image path or null if no image
+            'image' => $imagePath
         ]);
 
-        // Generate a Sanctum token for the newly created user
         $sanctum_tokens = $create_user->createToken('sanctum_tokens', ['*'], now()->addHours(24))->plainTextToken;
 
-        // Return a success response with the user details and the token
         return response()->json([
-            'status' => 'success', // Status of the registration process
-            'message' => 'User registered successfully', // Success message
+            'status' => 'success',
+            'message' => 'User registered successfully',
             'data' => [
                 'user' => [
                     'id' => $create_user->id,
@@ -94,10 +84,71 @@ class AuthController extends Controller
                     'status' => $create_user->status,
                     'created_at' => $create_user->created_at,
                     'updated_at' => $create_user->updated_at,
-                    'image' => $create_user->image ? asset('storage/' . $create_user->image) : null, // Provide URL if image exists
+                    'image' => $create_user->image ? asset('storage/' . $create_user->image) : null,
                 ],
-                'token' => $sanctum_tokens // Generated token for API authentication
+                'token' => $sanctum_tokens
             ]
-        ], 201); // HTTP Status 201: Created
+        ], 201);
+    }
+
+
+    /**
+     * Handle user login.
+     *
+     * This method receives the user credentials (username and password), validates the input,
+     * attempts to authenticate the user, and if successful, generates a Sanctum token for the user.
+     * The response includes the user's role and the generated token for authentication.
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function SignIn(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'username' => 'required',
+            'password' => 'required'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Invalid field',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $credentials = $request->only('username', 'password');
+
+        if (Auth::attempt($credentials)) {
+            $userLogin = Auth::user();
+
+            $sanctum_tokens = $userLogin->createToken('sanctum_tokens', ['*'], now()->addHours(24))->plainTextToken;
+
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'User login successfully',
+                'data' => [
+                    'id' => $userLogin->id,
+                    'full_name' => $userLogin->full_name,
+                    'roles' => $userLogin->roles,
+                    'token' => $sanctum_tokens
+                ],
+            ], 200);
+        }
+
+        return response()->json([
+            'message' => 'Invalid username or password',
+        ], 401);
+    }
+
+    public function SignOut(Request $request)
+    {
+        // Log out the user by revoking the user's token
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'User signed out successfully'
+        ], 200);
     }
 }
