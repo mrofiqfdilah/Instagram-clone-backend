@@ -143,7 +143,6 @@ class AuthController extends Controller
 
     public function SignOut(Request $request)
     {
-        // Log out the user by revoking the user's token
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([
