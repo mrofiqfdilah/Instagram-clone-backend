@@ -141,6 +141,14 @@ class AuthController extends Controller
         ], 401);
     }
 
+     /**
+     * Handle user logout
+     *
+     * This method is used to delete the session token of the logged in user (logout)
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function SignOut(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
